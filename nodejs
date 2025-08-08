@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multi-Step Student Attendance App</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial;
+      padding: 30px;
+      background-color: #f0f8ff;
+    }
+
+    section {
+      display: none;
+    }
+
+    section.active {
+      display: block;
+    }
+
+    input, select, button {
+      padding: 10px;
+      margin: 10px;
+      width: 250px;
+    }
+
+    .student {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 10px;
+    }
+
+    img {
+      width: 60px;
+      height: 60px;
+    }
+
+    table, th, td {
+      border: 1px solid #ccc;
+      border-collapse: collapse;
+      padding: 10px;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    .summary {
+      margin: 20px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- STEP 1: LOGIN -->
+  <section id="step1" class="active">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username"><br>
+    <input type="password" id="password" placeholder="Password"><br>
+    <button onclick="login()">Next</button>
+  </section>
+
+  <!-- STEP 2: DATE & TIME -->
+  <section id="step2">
+    <h2>Select Date, Time & Session</h2>
+    <input type="date" id="date"><br>
+    <input type="time" id="time"><br>
+    <select id="sessionSelect">
+      <option value="">Select Session</option>
+      <option value="morning">Morning</option>
+      <option value="afternoon">Afternoon</option>
+    </select><br>
+    <button onclick="saveDateTime()">Next</button>
+  </section>
+
+  <!-- STUDENT MANAGEMENT -->
+  <section id="studentManager">
+    <h2>Manage Students</h2>
+    <form id="addStudentForm">
+      <input type="text" id="newStudentName" placeholder="Enter Student Name" required>
+      <input type="text" id="newRollNo" placeholder="Enter Roll Number" required>
+      <input type="text" id="phoneNo" placeholder="Enter Phone Number" required>
+      <input type="text" id="email" placeholder="Enter Email" required>
+      <button type="submit">Add Student</button>
+    </form>
+    <div id="studentListContainer"></div>
+  </section>
+
+  <!-- STEP 3: DASHBOARD -->
+  <section id="step3">
+    <h2>Welcome, <span id="user"></span></h2>
+    <p>Date: <span id="displayDate"></span> | Time: <span id="displayTime"></span></p>
+    <h3>Select Student Group</h3>
+    <div>
+      <button onclick="selectGroup(1)">1-10</button>
+      <button onclick="selectGroup(2)">11-20</button>
+      <button onclick="selectGroup(3)">21-30</button>
+      <button onclick="selectGroup(4)">31-40</button>
+      <button onclick="selectGroup(5)">41-50</button>
+      <button onclick="selectGroup(6)">51-60</button>
+      <button onclick="selectGroup(7)">61-70</button>
+    </div>
+  </section>
+
+  <!-- STEP 4: MARK ATTENDANCE -->
+  <section id="step4">
+    <h2>Mark Attendance for Group: <span id="groupLabel"></span></h2>
+    <form id="attendanceForm">
+      <div id="studentList"></div>
+      <button type="submit">Submit Attendance</button>
+    </form>
+  </section>
+
+  <!-- STEP 5: HISTORY -->
+  <section id="step5">
+    <h2>Attendance History</h2>
+    <div class="summary" id="summary"></div>
+    <table id="historyTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Roll No</th>
+          <th>Status</th>
+          <th>Session</th>
+          <th>Phone</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button onclick="downloadCSV()">Download CSV</button>
+    <button onclick="goTo('chartSection')">View Chart</button>
+    <button onclick="goTo('step3')">Back to Dashboard</button>
+  </section>
+
+  <!-- CHART SECTION -->
+  <section id="chartSection">
+    <h2>Attendance Summary Chart</h2>
+    <canvas id="attendanceChart" width="600" height="300"></canvas>
+    <button onclick="goTo('step5')">Back</button>
+  </section>
+
+  <script>
+    let currentGroup = 1;
+    let allAttendance = [];
+
+    function goTo(stepId) {
+      document.querySelectorAll("section").forEach(sec => sec.classList.remove("active"));
+      document.getElementById(stepId).classList.add("active");
+    }
+
+    function login() {
+      const user = document.getElementById('username').value;
+      const pass = document.getElementById('password').value;
+      if (user === 'admin' && pass === '1234') {
+        localStorage.setItem('loggedInUser', user);
+        goTo('step2');
+      } else {
+        alert('Invalid credentials');
+      }
+    }
+
+    function saveDateTime() {
+      const date = document.getElementById('date').value;
+      const time = document.getElementById('time').value;
+      const session = document.getElementById('sessionSelect').value;
+      if (!date || !time || !session) return alert("Please select date, time and session");
+      localStorage.setItem('attendanceDate', date);
+      localStorage.setItem('attendanceTime', time);
+      localStorage.setItem('session', session);
+      document.getElementById('user').textContent = localStorage.getItem('loggedInUser');
+      document.getElementById('displayDate').textContent = date;
+      document.getElementById('displayTime').textContent = time + ' (' + session + ')';
+      goTo('step3');
+    }
+
+    function selectGroup(groupId) {
+      currentGroup = groupId;
+      localStorage.setItem('groupId', groupId);
+      generateStudentList(groupId);
+      document.getElementById('groupLabel').textContent = groupId;
+      goTo('step4');
+    }
+
+    function generateStudentList(groupId) {
+      const studentList = document.getElementById('studentList');
+      studentList.innerHTML = "";
+      const students = JSON.parse(localStorage.getItem('students') || '[]');
+      const startIndex = (groupId - 1) * 10;
+      const groupStudents = students.slice(startIndex, startIndex + 10);
+
+      groupStudents.forEach((s, i) => {
+        studentList.innerHTML += `
+        <div class="student">
+          <img src="${s.photo || 'https://via.placeholder.com/60'}">
+          <div>
+            <strong>${s.name}</strong><br>
+            Roll No: ${s.roll}<br>
+            Phone: ${s.phone}<br>
+            Email: ${s.email}
+          </div>
+          <select name="status${i}">
+            <option value="present">Present</option>
+            <option value="absent">Absent</option>
+            <option value="late">Late</option>
+          </select>
+        </div>`;
+      });
+
+      document.getElementById('attendanceForm').onsubmit = function (e) {
+        e.preventDefault();
+        const data = [];
+        const absentees = [];
+        const session = localStorage.getItem('session');
+
+        groupStudents.forEach((s, i) => {
+          const status = document.querySelector(`[name='status${i}']`).value;
+          const record = { ...s, status, session };
+          data.push(record);
+          if (status === 'absent') absentees.push(record);
+        });
+
+        allAttendance = allAttendance.concat(data);
+
+        if (currentGroup < 7) {
+          currentGroup++;
+          selectGroup(currentGroup);
+        } else {
+          localStorage.setItem('attendanceData', JSON.stringify(allAttendance));
+          localStorage.setItem('absentees', JSON.stringify(absentees));
+          loadHistory();
+          goTo('step5');
+        }
+      };
+    }
+
+    function loadHistory() {
+      const data = JSON.parse(localStorage.getItem('attendanceData')) || [];
+      const tbody = document.querySelector('#historyTable tbody');
+      tbody.innerHTML = "";
+      let present = 0, absent = 0, late = 0;
+
+      data.forEach(s => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${s.name}</td>
+          <td>${s.roll}</td>
+          <td>${s.status}</td>
+          <td>${s.session || ''}</td>
+          <td>${s.phone}</td>
+          <td>${s.email}</td>`;
+        tbody.appendChild(row);
+        if (s.status === 'present') present++;
+        else if (s.status === 'absent') absent++;
+        else late++;
+      });
+
+      document.getElementById('summary').innerHTML = `
+        <strong>Summary:</strong><br>
+        Present: ${present} | Absent: ${absent} | Late: ${late}`;
+
+      renderChart(present, absent, late);
+      sendAbsenteeAlerts(data.filter(s => s.status === 'absent'));
+    }
+
+    function renderChart(p, a, l) {
+      const ctx = document.getElementById("attendanceChart").getContext("2d");
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["Present", "Absent", "Late"],
+          datasets: [{
+            label: "Count",
+            data: [p, a, l],
+            backgroundColor: ["green", "red", "orange"]
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function sendAbsenteeAlerts(absentees) {
+      absentees.forEach(s => {
+        console.log(`📧 Email sent to ${s.email} | 📱 SMS to ${s.phone}: Absent on ${localStorage.getItem("attendanceDate")} (${s.session})`);
+      });
+    }
+
+    function downloadCSV() {
+      const data = JSON.parse(localStorage.getItem('attendanceData')) || [];
+      let csv = "Name,Roll No,Status,Session,Phone,Email\n";
+      data.forEach(s => {
+        csv += `${s.name},${s.roll},${s.status},${s.session || ''},${s.phone},${s.email}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'attendance_history.csv';
+      link.click();
+    }
+
+    document.getElementById("addStudentForm").onsubmit = function (e) {
+      e.preventDefault();
+      const name = document.getElementById("newStudentName").value;
+      const roll = document.getElementById("newRollNo").value;
+      const phone = document.getElementById("phoneNo").value;
+      const email = document.getElementById("email").value;
+
+      const students = JSON.parse(localStorage.getItem("students") || "[]");
+      students.push({ name, roll, phone, email });
+      localStorage.setItem("students", JSON.stringify(students));
+
+      alert("Student added!");
+      this.reset();
+      renderStudentList();
+    };
+
+    function renderStudentList() {
+      const container = document.getElementById("studentListContainer");
+      const students = JSON.parse(localStorage.getItem("students") || "[]");
+      container.innerHTML = "<h3>Students</h3>";
+      students.forEach((s, i) => {
+        container.innerHTML += `
+          <div>
+            <b>${s.name}</b> (Roll: ${s.roll}) - ${s.phone}, ${s.email}
+            <button onclick="editStudent(${i})">Edit</button>
+            <button onclick="deleteStudent(${i})">Delete</button>
+          </div>`;
+      });
+    }
+
+    function editStudent(index) {
+      const students = JSON.parse(localStorage.getItem("students") || "[]");
+      const s = students[index];
+      const name = prompt("Edit Name", s.name);
+      const roll = prompt("Edit Roll No", s.roll);
+      const phone = prompt("Edit Phone", s.phone);
+      const email = prompt("Edit Email", s.email);
+
+      if (name && roll && phone && email) {
+        students[index] = { name, roll, phone, email };
+        localStorage.setItem("students", JSON.stringify(students));
+        renderStudentList();
+      }
+    }
+
+    function deleteStudent(index) {
+      const students = JSON.parse(localStorage.getItem("students") || "[]");
+      if (confirm("Delete this student?")) {
+        students.splice(index, 1);
+        localStorage.setItem("students", JSON.stringify(students));
+        renderStudentList();
+      }
+    }
+
+    // Init
+    renderStudentList();
+  </script>
+</body>
+</html>
